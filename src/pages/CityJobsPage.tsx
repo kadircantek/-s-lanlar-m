@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { MapPin, Briefcase, TrendingUp, Users, Building2, Clock, Star, CheckCircle, ArrowRight, Target, Award, Globe, Zap, Heart, Shield, Lightbulb, Search, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { JobList } from '../components/home/JobList';
@@ -10,25 +10,45 @@ import { generateMetaTags } from '../utils/seoUtils';
 import { Breadcrumb } from '../components/ui/Breadcrumb';
 
 export function CityJobsPage() {
-  const { city } = useParams<{ city: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { jobs, categories, loading, error, refetchJobs } = useJobs();
   const { filters, updateFilters, filteredJobs } = useJobFilters(jobs);
 
-  // Şehir adını formatla
-  const cityName = city?.split('-')[0]?.charAt(0).toUpperCase() + city?.split('-')[0]?.slice(1) || '';
+  // URL'den şehir adını çıkar (örn: /istanbul-is-ilanlari -> Istanbul)
+  const getCityFromPath = () => {
+    const pathname = location.pathname;
+    const match = pathname.match(/\/(.*?)-is-ilanlari/);
+    if (match && match[1]) {
+      return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+    }
+    return '';
+  };
+
+  const cityName = getCityFromPath();
   
-  // Şehir bazlı filtreleme
-  const cityJobs = filteredJobs.filter(job => 
-    job.location.toLowerCase().includes(cityName.toLowerCase())
-  );
+  // Şehir bazlı filtreleme - Sadece o şehrin ilanlarını göster
+  const cityJobs = filteredJobs.filter(job => {
+    if (!job.location || !cityName) return false;
+    
+    const jobLocation = job.location.toLowerCase();
+    const city = cityName.toLowerCase();
+    
+    // Tam şehir adı eşleşmesi veya şehir adı içeriyorsa
+    return jobLocation.includes(city) || 
+           jobLocation.startsWith(city) ||
+           jobLocation === city;
+  });
 
   useEffect(() => {
-    // SEO meta tags
+    if (!cityName) return;
+
+    // SEO meta tags - Google aramaları için optimize edilmiş
     generateMetaTags({
-      title: `${cityName} İş İlanları - 2025 Güncel ${cityName} İş Fırsatları`,
-      description: `${cityName}'da iş arıyorsanız doğru yerdesiniz! 50.000+ güncel iş ilanı arasından ${cityName} pozisyonları. Mühendis, garson, kurye, resepsiyon görevlisi, aşçı yardımcısı, özel güvenlik iş ilanları. Hemen başvuru yapın!`,
+      title: `Tüm ${cityName} İş İlanları - 2025 Güncel ${cityName} İş Fırsatları | ${cityJobs.length}+ İlan`,
+      description: `Tüm ${cityName} iş ilanları tek sayfada! ${cityJobs.length}+ güncel ${cityName} iş ilanı. Mühendis, garson, kurye, resepsiyon görevlisi, aşçı yardımcısı, özel güvenlik iş ilanları. ${cityName}'da iş bul, hemen başvuru yap!`,
       keywords: [
+        `tüm ${cityName.toLowerCase()} iş ilanları`,
         `${cityName.toLowerCase()} iş ilanları`,
         `${cityName.toLowerCase()} iş ilanları 2025`,
         `${cityName.toLowerCase()} iş fırsatları`,
@@ -38,6 +58,7 @@ export function CityJobsPage() {
         `${cityName.toLowerCase()} mühendis iş ilanları`,
         `${cityName.toLowerCase()} garson iş ilanları`,
         `${cityName.toLowerCase()} kurye iş ilanları`,
+        `${cityName.toLowerCase()} kasiyer iş ilanları`,
         `${cityName.toLowerCase()} resepsiyon görevlisi iş ilanları`,
         `${cityName.toLowerCase()} aşçı yardımcısı iş ilanları`,
         `${cityName.toLowerCase()} özel güvenlik iş ilanları`,
@@ -52,11 +73,93 @@ export function CityJobsPage() {
       url: window.location.pathname,
       cityName: cityName
     });
-  }, [cityName]);
+
+    // Schema.org yapılandırılmış veri - Google için
+    const schema = {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": `Tüm ${cityName} İş İlanları`,
+      "description": `${cityJobs.length}+ güncel ${cityName} iş ilanı. Her sektörden iş fırsatları.`,
+      "url": window.location.href,
+      "inLanguage": "tr-TR",
+      "about": {
+        "@type": "Thing",
+        "name": `${cityName} İş İlanları`,
+        "description": `${cityName} bölgesindeki tüm iş ilanları ve kariyer fırsatları`
+      },
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Ana Sayfa",
+            "item": window.location.origin
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": `Tüm ${cityName} İş İlanları`,
+            "item": window.location.href
+          }
+        ]
+      },
+      "mainEntity": {
+        "@type": "ItemList",
+        "numberOfItems": cityJobs.length,
+        "itemListElement": cityJobs.slice(0, 10).map((job, index) => ({
+          "@type": "ListItem",
+          "position": index + 1,
+          "item": {
+            "@type": "JobPosting",
+            "title": job.title,
+            "description": job.description?.substring(0, 200) || '',
+            "datePosted": job.createdAt || new Date().toISOString().split('T')[0],
+            "validThrough": new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            "employmentType": job.type === "Tam Zamanlı" ? "FULL_TIME" : 
+                             job.type === "Yarı Zamanlı" ? "PART_TIME" : "FULL_TIME",
+            "hiringOrganization": {
+              "@type": "Organization",
+              "name": job.company || "İşveren",
+              "sameAs": window.location.origin
+            },
+            "jobLocation": {
+              "@type": "Place",
+              "address": {
+                "@type": "PostalAddress",
+                "addressLocality": cityName,
+                "addressCountry": "TR"
+              }
+            }
+          }
+        }))
+      }
+    };
+
+    // Schema'yı sayfaya ekle
+    const existingSchema = document.getElementById('city-jobs-schema');
+    if (existingSchema) {
+      existingSchema.textContent = JSON.stringify(schema);
+    } else {
+      const script = document.createElement('script');
+      script.id = 'city-jobs-schema';
+      script.type = 'application/ld+json';
+      script.textContent = JSON.stringify(schema);
+      document.head.appendChild(script);
+    }
+
+    // Cleanup
+    return () => {
+      const schemaElement = document.getElementById('city-jobs-schema');
+      if (schemaElement) {
+        schemaElement.remove();
+      }
+    };
+  }, [cityName, cityJobs]);
 
   const breadcrumbItems = [
-    { label: 'İş İlanları', href: '/' },
-    { label: `${cityName} İş İlanları` }
+    { label: 'Ana Sayfa', href: '/' },
+    { label: `Tüm ${cityName} İş İlanları` }
   ];
 
   // Şehir bilgileri
@@ -124,7 +227,7 @@ export function CityJobsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
           <div className="text-center">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4">
-              {cityName} İş İlanları - 2025 Güncel {cityName} İş Fırsatları
+              Tüm {cityName} İş İlanları - 2025 Güncel {cityName} İş Fırsatları
             </h1>
             <p className="text-lg sm:text-xl text-blue-100 mb-6 max-w-3xl mx-auto">
               {cityInfo.description}
@@ -236,12 +339,12 @@ export function CityJobsPage() {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                 <Building2 className="h-7 w-7 text-blue-600" />
-                {cityName} İş Piyasası Analizi ve Kariyer Fırsatları
+                Tüm {cityName} İş İlanları - İş Piyasası Analizi ve Kariyer Fırsatları
               </h2>
               
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h3 className="font-semibold text-gray-900 mb-3">Sektörel Dağılım</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">{cityName} İş İlanları Sektörel Dağılım</h3>
                   <p className="text-sm text-gray-700 mb-4">
                     {cityName}'da en güçlü sektörler ve iş imkanları analizi.
                   </p>
@@ -256,7 +359,7 @@ export function CityJobsPage() {
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h3 className="font-semibold text-gray-900 mb-3">Maaş Analizi</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">{cityName} İş İlanları Maaş Analizi</h3>
                   <p className="text-sm text-gray-700 mb-4">
                     {cityName}'da ortalama maaş seviyeleri ve sektörel karşılaştırma.
                   </p>
@@ -273,7 +376,7 @@ export function CityJobsPage() {
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h3 className="font-semibold text-gray-900 mb-3">İş Arama İpuçları</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">{cityName}'da İş Arama İpuçları</h3>
                   <p className="text-sm text-gray-700 mb-4">
                     {cityName}'da başarılı iş arama stratejileri.
                   </p>
@@ -291,7 +394,7 @@ export function CityJobsPage() {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                 <Briefcase className="h-7 w-7 text-blue-600" />
-                {cityName}'da Popüler İş Kategorileri
+                Tüm {cityName} İş İlanları - Popüler İş Kategorileri
               </h2>
               
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -316,12 +419,12 @@ export function CityJobsPage() {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                 <MapPin className="h-7 w-7 text-blue-600" />
-                {cityName}'da Yaşam ve Ulaşım
+                {cityName} İş İlanları - Yaşam ve Ulaşım Bilgileri
               </h2>
               
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h3 className="font-semibold text-gray-900 mb-3">Ulaşım İmkanları</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">{cityName} Ulaşım İmkanları</h3>
                   <p className="text-sm text-gray-700 mb-4">
                     {cityName}'da işe ulaşım seçenekleri ve toplu taşıma bilgileri.
                   </p>
@@ -346,7 +449,7 @@ export function CityJobsPage() {
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h3 className="font-semibold text-gray-900 mb-3">Yaşam Kalitesi</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">{cityName} Yaşam Kalitesi</h3>
                   <p className="text-sm text-gray-700 mb-4">
                     {cityName}'da çalışanlar için yaşam kalitesi ve sosyal imkanlar.
                   </p>
@@ -374,9 +477,10 @@ export function CityJobsPage() {
 
             {/* Call to Action */}
             <section className="text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white p-8 rounded-xl">
-              <h3 className="text-2xl font-bold mb-4">{cityName}'da Kariyerinizi Başlatın!</h3>
+              <h3 className="text-2xl font-bold mb-4">Tüm {cityName} İş İlanlarına Ulaşın ve Kariyerinizi Başlatın!</h3>
               <p className="text-lg mb-6 opacity-90">
-                {cityName}'daki en güncel iş fırsatlarını kaçırmayın. Hemen başvuru yapın ve kariyerinizi ileriye taşıyın.
+                {cityJobs.length}+ güncel {cityName} iş ilanı arasından size uygun pozisyonu bulun. 
+                Hemen başvuru yapın ve kariyerinizi bir üst seviyeye taşıyın.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link 
@@ -397,31 +501,67 @@ export function CityJobsPage() {
             </section>
 
             {/* SEO Text */}
-            <section className="text-center text-sm text-gray-600 leading-relaxed bg-white p-8 rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">{cityName} İş İlanları Hakkında</h2>
-              <p className="mb-4">
-                <strong>{cityName} iş ilanları</strong> kategorimizde {cityName}'da çalışmak isteyen adaylar için 
-                binlerce güncel iş fırsatı bulunmaktadır. <strong>{cityName} iş ara</strong> seçeneğiyle 
-                filtreleme yapabilir, <strong>{cityName} kariyer fırsatları</strong> arasından size en uygun 
-                pozisyonu seçebilirsiniz. <strong>{cityName} iş başvurusu</strong> yapmak için sadece 
-                ilan detaylarına tıklayın ve iletişim bilgilerini kullanın.
-              </p>
-              <p className="mb-4">
-                <strong>{cityName} mühendis iş ilanları</strong>, <strong>{cityName} garson iş ilanları</strong>, 
-                <strong>{cityName} kurye iş ilanları</strong>, <strong>{cityName} resepsiyon görevlisi iş ilanları</strong>, 
-                <strong>{cityName} aşçı yardımcısı iş ilanları</strong> ve <strong>{cityName} özel güvenlik iş ilanları</strong> 
-                başta olmak üzere her sektörden pozisyonlar bulabilirsiniz. <strong>{cityName} part time iş</strong>, 
-                <strong>{cityName} tam zamanlı iş</strong>, <strong>{cityName} uzaktan çalışma</strong> seçenekleriyle 
-                çalışma şeklinize uygun ilanları keşfedin.
-              </p>
-              <p>
-                <strong>{cityName} iş piyasası</strong> sürekli gelişmekte ve yeni fırsatlar sunmaktadır. 
-                <strong>{cityName} iş imkanları</strong> hakkında detaylı bilgi almak, 
-                <strong>{cityName} maaş seviyeleri</strong> hakkında bilgi edinmek ve 
-                <strong>{cityName} kariyer rehberi</strong> için platformumuzu takip edin. 
-                İş arayanlar için <strong>{cityName} CV hazırlama</strong> ve 
-                <strong>{cityName} mülakat hazırlığı</strong> ipuçlarımızı da inceleyebilirsiniz.
-              </p>
+            <section className="text-sm text-gray-700 leading-relaxed bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Tüm {cityName} İş İlanları Hakkında</h2>
+              
+              <div className="space-y-4 text-left max-w-4xl mx-auto">
+                <p>
+                  <strong>Tüm {cityName} iş ilanları</strong> sayfamızda {cityName}'da çalışmak isteyen adaylar için 
+                  {cityJobs.length}+ güncel iş fırsatı bulunmaktadır. <strong>{cityName} iş ara</strong> seçeneğiyle 
+                  filtreleme yapabilir, <strong>tüm {cityName} kariyer fırsatları</strong> arasından size en uygun 
+                  pozisyonu kolayca bulabilirsiniz. <strong>{cityName} iş başvurusu</strong> yapmak için sadece 
+                  ilan detaylarına tıklayın ve direkt olarak işverene ulaşın.
+                </p>
+                
+                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
+                  {cityName} İş İlanları - Popüler Pozisyonlar
+                </h3>
+                <p>
+                  <strong>Tüm {cityName} mühendis iş ilanları</strong>, <strong>{cityName} garson iş ilanları</strong>, 
+                  <strong>{cityName} kurye iş ilanları</strong>, <strong>{cityName} resepsiyon görevlisi iş ilanları</strong>, 
+                  <strong>{cityName} aşçı yardımcısı iş ilanları</strong>, <strong>{cityName} özel güvenlik iş ilanları</strong>, 
+                  <strong>{cityName} kasiyer iş ilanları</strong>, <strong>{cityName} satış danışmanı iş ilanları</strong> ve 
+                  <strong>{cityName} muhasebeci iş ilanları</strong> başta olmak üzere her sektörden pozisyonlar 
+                  sayfamızda listelenmektedir.
+                </p>
+                
+                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
+                  {cityName} İş İlanları - Çalışma Şekilleri
+                </h3>
+                <p>
+                  <strong>Tüm {cityName} part time iş ilanları</strong>, <strong>{cityName} tam zamanlı iş ilanları</strong>, 
+                  <strong>{cityName} uzaktan çalışma iş ilanları</strong>, <strong>{cityName} freelance iş ilanları</strong> ve 
+                  <strong>{cityName} home office iş ilanları</strong> seçenekleriyle çalışma şeklinize uygun 
+                  ilanları keşfedebilirsiniz. Esnek çalışma saatleri, vardiya sistemi veya standart mesai saatleri 
+                  arasından tercih yapabilirsiniz.
+                </p>
+                
+                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
+                  {cityName} İş Piyasası ve Kariyer Fırsatları
+                </h3>
+                <p>
+                  <strong>{cityName} iş piyasası</strong> sürekli gelişmekte ve yeni fırsatlar sunmaktadır. 
+                  <strong>Tüm {cityName} iş imkanları</strong> hakkında detaylı bilgi almak, 
+                  <strong>{cityName} maaş seviyeleri</strong> hakkında güncel veriler edinmek ve 
+                  <strong>{cityName} kariyer rehberi</strong> için platformumuzu düzenli olarak takip edin. 
+                </p>
+                
+                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
+                  {cityName}'da İş Başvurusu Nasıl Yapılır?
+                </h3>
+                <p>
+                  İş arayanlar için <strong>{cityName} CV hazırlama</strong>, 
+                  <strong>{cityName} mülakat hazırlığı</strong> ve <strong>{cityName} iş başvuru ipuçları</strong> 
+                  rehberlerimizi inceleyebilirsiniz. Profesyonel CV örnekleri, başarılı mülakat teknikleri ve 
+                  sektöre özel başvuru stratejileri ile iş bulma şansınızı artırın.
+                </p>
+                
+                <div className="bg-blue-50 border-l-4 border-blue-600 p-4 mt-6">
+                  <p className="font-semibold text-blue-900">
+                    💼 {cityJobs.length}+ aktif {cityName} iş ilanı arasından size en uygun pozisyonu bulun ve hemen başvurun!
+                  </p>
+                </div>
+              </div>
             </section>
           </div>
         </div>

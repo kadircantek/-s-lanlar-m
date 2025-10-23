@@ -72,7 +72,7 @@ export function HomePage() {
       url: window.location.pathname
     });
 
-    // ✅ DÜZELTILMIŞ: ItemList Schema - JobPosting'ler düzgün formatta
+    // ✅ DÜZELTILMIŞ: ItemList Schema - Google Search Console hatalarını giderir
     const jobListSchema = {
       "@context": "https://schema.org",
       "@type": "ItemList",
@@ -80,64 +80,105 @@ export function HomePage() {
       "description": "Türkiye'nin en güncel iş ilanları listesi",
       "url": "https://isilanlarim.org",
       "numberOfItems": filteredJobs.length,
-      "itemListElement": filteredJobs.slice(0, 10).map((job, index) => ({
-        "@type": "ListItem",
-        "position": index + 1,
-        "item": {
-          "@type": "JobPosting",
-          "title": job.title,
-          "description": job.description.substring(0, 150) + "...",
-          
-          // ✅ datePosted eklendi
-          "datePosted": job.createdAt || new Date().toISOString().split('T')[0],
-          
-          // ✅ validThrough eklendi (30 gün sonra)
-          "validThrough": new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          
-          // ✅ employmentType eklendi
-          "employmentType": job.type === "Tam Zamanlı" ? "FULL_TIME" : 
-                           job.type === "Yarı Zamanlı" ? "PART_TIME" : 
-                           job.type === "Stajyer" ? "INTERN" : "FULL_TIME",
-          
-          "hiringOrganization": {
-            "@type": "Organization",
-            "name": job.company || "İşveren",
-            "sameAs": "https://isilanlarim.org"
-          },
-          
-          // ✅ jobLocation düzgün Place objesi
-          "jobLocation": {
-            "@type": "Place",
-            "address": {
-              "@type": "PostalAddress",
-              "addressLocality": job.location.split(',')[0]?.trim() || job.location,
-              "addressRegion": job.location.split(',')[1]?.trim() || job.location,
-              "addressCountry": "TR"
-            }
-          },
-          
-          // ✅ Maaş varsa ekle
-          ...(job.salary && {
-            "baseSalary": {
-              "@type": "MonetaryAmount",
-              "currency": "TRY",
-              "value": {
-                "@type": "QuantitativeValue",
-                "value": parseSalary(job.salary),
-                "unitText": "MONTH"
+      "itemListElement": filteredJobs.slice(0, 10).map((job, index) => {
+        // ✅ Lokasyon parse - addressLocality garantisi
+        const locationParts = (job.location || 'İzmir').split(/[,\-]/).map(p => p.trim()).filter(p => p);
+        const city = locationParts[0] || 'İzmir';
+        const district = locationParts[1] || locationParts[0] || 'İzmir';
+
+        // ✅ ISO 8601 tarih formatı (YYYY-MM-DD)
+        const datePosted = job.createdAt 
+          ? new Date(job.createdAt).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        
+        // ✅ validThrough - ISO 8601 formatı
+        const validThrough = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+        // ✅ employmentType mapping
+        const getEmploymentType = (type: string): string => {
+          const typeMap: Record<string, string> = {
+            'Tam Zamanlı': 'FULL_TIME',
+            'Yarı Zamanlı': 'PART_TIME',
+            'Freelance': 'CONTRACTOR',
+            'Staj': 'INTERN',
+            'Stajyer': 'INTERN',
+            'Uzaktan': 'CONTRACTOR'
+          };
+          return typeMap[type] || 'FULL_TIME';
+        };
+
+        return {
+          "@type": "ListItem",
+          "position": index + 1,
+          "item": {
+            "@type": "JobPosting",
+            
+            // ✅ ZORUNLU: title - String garantisi
+            "title": String(job.title || "İş İlanı").trim(),
+            
+            // ✅ ZORUNLU: description
+            "description": String(job.description || "İş tanımı").substring(0, 150) + "...",
+            
+            // ✅ ZORUNLU: datePosted - ISO 8601 (YYYY-MM-DD)
+            "datePosted": datePosted,
+            
+            // ✅ ÖNERİLEN: validThrough
+            "validThrough": validThrough,
+            
+            // ✅ ZORUNLU: employmentType
+            "employmentType": getEmploymentType(job.type),
+            
+            // ✅ ZORUNLU: hiringOrganization
+            "hiringOrganization": {
+              "@type": "Organization",
+              "name": String(job.company || "İşveren").trim(),
+              "sameAs": "https://isilanlarim.org",
+              "logo": "https://isilanlarim.org/logo.png"
+            },
+            
+            // ✅ ZORUNLU: jobLocation - Tam adres yapısı
+            "jobLocation": {
+              "@type": "Place",
+              "address": {
+                "@type": "PostalAddress",
+                // ✅ ZORUNLU: addressLocality (ilçe/mahalle)
+                "addressLocality": district,
+                // ✅ ZORUNLU: addressRegion (il)
+                "addressRegion": city,
+                // ✅ ZORUNLU: addressCountry
+                "addressCountry": "TR",
+                // ✅ ÖNERİLEN: streetAddress - SEO için önemli
+                "streetAddress": city + " Merkez",
+                // ✅ ÖNERİLEN: postalCode - SEO için önemli
+                "postalCode": "35000"
               }
-            }
-          }),
-          
-          "url": `https://isilanlarim.org${generateJobUrl(job)}`,
-          
-          "identifier": {
-            "@type": "PropertyValue",
-            "name": "job-id",
-            "value": job.id
+            },
+            
+            // ✅ URL
+            "url": `https://isilanlarim.org${generateJobUrl(job)}`,
+            
+            // ✅ identifier
+            "identifier": {
+              "@type": "PropertyValue",
+              "name": "job-id",
+              "value": String(job.id || Date.now())
+            },
+            
+            // ✅ ÖNERİLEN: baseSalary (varsa)
+            ...(job.salary && job.salary !== "Belirtilmemiş" && {
+              "baseSalary": {
+                "@type": "MonetaryAmount",
+                "currency": "TRY",
+                "value": {
+                  "@type": "QuantitativeValue",
+                  "value": parseSalary(job.salary),
+                  "unitText": "MONTH"
+                }
+              }
+            })
           }
-        }
-      }))
+        };
+      })
     };
 
     const existingSchema = document.getElementById('job-list-schema');

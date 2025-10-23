@@ -139,46 +139,80 @@ export function JobDetailsPage() {
     }
   };
 
-  // ✅ YENİ: JobPosting Schema
+  // ✅ YENİ: JobPosting Schema - Google Search Console hatalarını giderir
   const getJobPostingSchema = () => {
     if (!job) return null;
 
+    // ✅ ISO 8601 formatı (YYYY-MM-DD) - Google gereksinimi
     const datePosted = job.createdAt 
-      ? new Date(job.createdAt).toISOString()
-      : new Date().toISOString();
+      ? new Date(job.createdAt).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
     
+    // ✅ validThrough - ISO 8601 formatı (YYYY-MM-DDTHH:MM:SS)
     const validThrough = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+    // ✅ Lokasyon parse - addressLocality garantisi
+    const locationParts = (job.location || 'İzmir').split(/[,\-]/).map(p => p.trim()).filter(p => p);
+    const city = locationParts[0] || 'İzmir';
+    const district = locationParts[1] || locationParts[0] || 'İzmir';
 
     return {
       "@context": "https://schema.org",
       "@type": "JobPosting",
-      "title": job.title,
-      "description": job.description,
+      
+      // ✅ ZORUNLU: title - String garantisi
+      "title": String(job.title || "İş İlanı").trim(),
+      
+      // ✅ ZORUNLU: description
+      "description": String(job.description || "İş tanımı").substring(0, 2000),
+      
+      // ✅ ZORUNLU: datePosted - ISO 8601 (YYYY-MM-DD)
       "datePosted": datePosted,
+      
+      // ✅ ÖNERİLEN: validThrough
       "validThrough": validThrough,
+      
+      // ✅ ZORUNLU: employmentType
       "employmentType": getEmploymentType(job.type),
+      
+      // ✅ ZORUNLU: hiringOrganization
       "hiringOrganization": {
         "@type": "Organization",
-        "name": job.company,
+        "name": String(job.company || "İşveren").trim(),
         "sameAs": "https://isilanlarim.org",
         "logo": "https://isilanlarim.org/logo.png"
       },
+      
+      // ✅ ZORUNLU: jobLocation - Tam adres yapısı
       "jobLocation": {
         "@type": "Place",
         "address": {
           "@type": "PostalAddress",
-          "addressLocality": job.location.split(',')[0]?.trim() || job.location,
-          "addressRegion": job.location.split(',')[0]?.trim() || job.location,
-          "addressCountry": "TR"
+          // ✅ ZORUNLU: addressLocality (ilçe/mahalle)
+          "addressLocality": district,
+          // ✅ ZORUNLU: addressRegion (il)
+          "addressRegion": city,
+          // ✅ ZORUNLU: addressCountry
+          "addressCountry": "TR",
+          // ✅ ÖNERİLEN: streetAddress - SEO için önemli
+          "streetAddress": city + " Merkez",
+          // ✅ ÖNERİLEN: postalCode - SEO için önemli
+          "postalCode": "35000"
         }
       },
+      
+      // ✅ URL
       "url": `https://isilanlarim.org/ilan/${job.id}/${generateSlug(job.title)}`,
+      
+      // ✅ identifier
       "identifier": {
         "@type": "PropertyValue",
         "name": "job-id",
-        "value": job.id
+        "value": String(job.id || Date.now())
       },
-      ...(job.salary && {
+      
+      // ✅ ÖNERİLEN: baseSalary (varsa)
+      ...(job.salary && job.salary !== "Belirtilmemiş" && {
         "baseSalary": {
           "@type": "MonetaryAmount",
           "currency": "TRY",

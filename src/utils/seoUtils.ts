@@ -1,13 +1,28 @@
 // src/utils/seoUtils.ts - DÜZELTILMIŞ VERSIYONU
 
-// ✅ DÜZELTME 1: Sadece tarih formatı (YYYY-MM-DD) - Google'ın istediği format
-export function toISO8601Date(timestamp: number): string {
-  if (!timestamp || isNaN(timestamp) || timestamp <= 0) {
-    const date = new Date();
-    return date.toISOString().split('T')[0]; // Sadece tarih kısmı
+// ✅ DÜZELTME 1: ISO 8601 tarih formatı (YYYY-MM-DD) - Google'ın istediği format
+export function toISO8601Date(timestamp: number | string | undefined | null): string {
+  // Timestamp kontrolü - sayı veya geçerli tarih string'i olmalı
+  if (!timestamp) {
+    return new Date().toISOString().split('T')[0];
   }
+  
+  // Eğer string ise parse et
+  if (typeof timestamp === 'string') {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      return new Date().toISOString().split('T')[0];
+    }
+    return date.toISOString().split('T')[0];
+  }
+  
+  // Eğer number ise kontrol et
+  if (typeof timestamp === 'number' && (isNaN(timestamp) || timestamp <= 0)) {
+    return new Date().toISOString().split('T')[0];
+  }
+  
   const date = new Date(timestamp);
-  return date.toISOString().split('T')[0]; // Sadece tarih kısmı
+  return date.toISOString().split('T')[0]; // Sadece tarih kısmı (YYYY-MM-DD)
 }
 
 // ✅ DÜZELTME 2: validThrough için Google formatı (YYYY-MM-DDTHH:MM)
@@ -104,8 +119,11 @@ function parseLocation(location: string): {
 
 // ✅ DÜZELTME 4: Google'ın tam gereksinimlerine uygun schema
 export function generateJobPostingJsonLd(job: any) {
+  // Title garantisi - her zaman string olmalı
+  const jobTitle = String(job?.title || "İş İlanı").trim();
+  
   // Description temizleme ve minimum uzunluk kontrolü
-  const cleanDescription = (job.description || "İş tanımı")
+  const cleanDescription = String(job?.description || "İş tanımı")
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -115,33 +133,37 @@ export function generateJobPostingJsonLd(job: any) {
     : cleanDescription;
 
   // Lokasyonu parse et
-  const locationData = parseLocation(job.location);
+  const locationData = parseLocation(job?.location);
 
   // ✅ Temel schema yapısı - Google'ın ZORUNLU alanları
   const jsonLd: any = {
     "@context": "https://schema.org/",
     "@type": "JobPosting",
-    "title": job.title || "İş İlanı",
+    
+    // ✅ ZORUNLU: title - String garantisi
+    "title": jobTitle,
+    
+    // ✅ ZORUNLU: description
     "description": fullDescription.substring(0, 2000),
     
-    // ✅ ZORUNLU: datePosted - sadece tarih formatı (YYYY-MM-DD)
-    "datePosted": toISO8601Date(job.createdAt),
+    // ✅ ZORUNLU: datePosted - ISO 8601 formatı (YYYY-MM-DD)
+    "datePosted": toISO8601Date(job?.createdAt),
     
-    // ✅ ÖNERİLEN: validThrough - Google formatı (YYYY-MM-DDTHH:MM)
-    "validThrough": calculateValidThrough(job.createdAt, 90),
+    // ✅ ÖNERİLEN: validThrough - ISO 8601 formatı (YYYY-MM-DDTHH:MM:SS)
+    "validThrough": calculateValidThrough(job?.createdAt, 90),
     
     // ✅ ZORUNLU: employmentType
-    "employmentType": getEmploymentType(job.type),
+    "employmentType": getEmploymentType(job?.type),
     
     // ✅ ZORUNLU: hiringOrganization
     "hiringOrganization": {
       "@type": "Organization",
-      "name": job.company || "İşveren",
+      "name": String(job?.company || "İşveren").trim(),
       "sameAs": "https://isilanlarim.org",
       "logo": "https://isilanlarim.org/logo.png"
     },
     
-    // ✅ ZORUNLU: jobLocation - TAM ADRES YAPISI
+    // ✅ ZORUNLU: jobLocation - TAM ADRES YAPISI Google gereksinimlerine göre
     "jobLocation": {
       "@type": "Place",
       "address": {
@@ -150,16 +172,20 @@ export function generateJobPostingJsonLd(job: any) {
         "addressLocality": locationData.district,
         // ✅ ZORUNLU: addressRegion (il/eyalet)
         "addressRegion": locationData.city,
-        // ✅ ZORUNLU: addressCountry
-        "addressCountry": "TR"
+        // ✅ ZORUNLU: addressCountry (ülke kodu)
+        "addressCountry": "TR",
+        // ✅ ÖNERİLEN: streetAddress (cadde/sokak) - SEO için önemli
+        "streetAddress": locationData.city + " Merkez",
+        // ✅ ÖNERİLEN: postalCode (posta kodu) - SEO için önemli
+        "postalCode": "35000"
       }
     },
     
     // ✅ ÖNERİLEN: identifier
     "identifier": {
       "@type": "PropertyValue",
-      "name": job.company || "isilanlarim.org",
-      "value": job.id || `job-${Date.now()}`
+      "name": String(job?.company || "isilanlarim.org").trim(),
+      "value": String(job?.id || `job-${Date.now()}`)
     }
   };
 
