@@ -500,6 +500,11 @@
     padding-left: 16px;
     padding-right: 16px;
   }
+
+  /* Alt navigasyon için içerik padding'i */
+  main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+  }
 }
 
 /* Tablet optimizasyonları */
