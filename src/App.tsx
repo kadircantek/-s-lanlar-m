@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async'; // ✅ YENİ
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { HomePage } from './pages/HomePage';
@@ -170,6 +171,7 @@ export function App() {
               </div>
             </main>
             <Footer />
+            <MobileBottomNav />
             <LiveSupportWidget />
           </div>
         </AuthProvider>
